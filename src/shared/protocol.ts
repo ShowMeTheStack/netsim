@@ -1,5 +1,6 @@
 // Messages between the UI thread and the engine worker.
 import type { NodeState, LinkState, Breakpoint, BreakpointHit, Flight, CapturedFrame, Milestone, HostKind, NodeId, LinkId, SnifferId, LinkImpair, HostState, RfTransmission, WifiCapture } from '@/engine/types';
+import type { CDiagnostic } from './cprograms';
 
 export type RunMode = 'paused' | 'play' | 'turbo';
 export interface SnifferMeta { id: SnifferId; linkId: LinkId; total: number; captureFilter: string }
@@ -39,13 +40,15 @@ export type Cmd =
   | { type: 'runCmd'; node: NodeId; line: string }
   | { type: 'addSniffer'; link: LinkId } | { type: 'removeSniffer'; id: SnifferId } | { type: 'clearCapture'; id: SnifferId } | { type: 'setCaptureFilter'; id: SnifferId; expr: string }
   | { type: 'addBreakpoint'; expr: string; milestones: Milestone[]; label?: string } | { type: 'removeBreakpoint'; id: number } | { type: 'toggleBreakpoint'; id: number; enabled: boolean }
-  | { type: 'play' } | { type: 'pause' } | { type: 'turbo' } | { type: 'stepEvent' } | { type: 'stepPacket' } | { type: 'setSpeed'; speed: number } | { type: 'restart' }
+  | { type: 'play' } | { type: 'pause' } | { type: 'turbo' } | { type: 'stepEvent' } | { type: 'stepPacket' } | { type: 'stepSyscall' } | { type: 'setSpeed'; speed: number } | { type: 'restart' }
   | { type: 'exportSession'; theme?: string } | { type: 'importSession'; json: string } | { type: 'newSession'; seed?: number }
-  | { type: 'loadScenario'; json: string } | { type: 'requestState' };
+  | { type: 'loadScenario'; json: string } | { type: 'requestState' }
+  | { type: 'compileRun'; node: NodeId; name: string; source: string; argv: string[]; backend: 'clang' | 'nsc' | 'stub' };
 export type Msg =
   | { type: 'state'; st: UiState }
   | { type: 'capture'; snifferId: SnifferId; frames: CapturedFrame[]; reset?: boolean }
   | { type: 'session'; json: string }
   | { type: 'imported'; theme?: string }
   | { type: 'error'; message: string }
+  | { type: 'compile'; node: NodeId; ok: boolean; diagnostics: CDiagnostic[]; pid?: number }
   | { type: 'ready' };

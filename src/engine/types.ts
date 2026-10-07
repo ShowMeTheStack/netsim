@@ -68,7 +68,17 @@ export interface IperfProc { kind: 'iperf'; pid: number; role: 'server' | 'clien
 export interface NcProc { kind: 'nc'; pid: number; role: 'listen' | 'connect'; udp: boolean; sock: number; port: number; target: number | null; message: string | null; done: boolean; acceptedSock: number | null; keep: boolean }
 export interface HttpConn { buf: Uint8Array; keepAlive: boolean; served: number; requests?: string[]; sentAt?: Record<string, number> }
 export interface HttpProc { kind: 'http'; pid: number; role: 'server' | 'client'; port: number; sock: number; conns: Record<number, HttpConn>; done: boolean; target: number | null; host: string; path: string; mode: 'persistent' | 'nonpersistent'; pending: string[]; fetched: { path: string; status: number; bytes: number; ms: number; start: number }[]; startedAt: number; pipeline: boolean; method: string }
-export type Proc = PingProc | TracerouteProc | IperfProc | NcProc | HttpProc;
+// A compiled/interpreted user program (e.g. a C socket program). The serializable half lives here;
+// its non-cloneable execution context (coroutine / WASM instance) lives in a module-side table
+// keyed by `rid`, and is rebuilt by deterministic replay-from-source on restore. `blocked` records
+// what the program is currently waiting on, for the runtime inspector.
+export interface CProc {
+  kind: 'cprog'; pid: number; rid: string; name: string; argv: string[];
+  fds: Record<number, number>; nextFd: number;        // fd -> socket id
+  blocked: { syscall: string; sock?: number } | null;
+  stdout: string[]; done: boolean; exitCode: number | null;
+}
+export type Proc = PingProc | TracerouteProc | IperfProc | NcProc | HttpProc | CProc;
 
 export interface RipRoute { dst: number; mask: number; gw: number; iface: string; metric: number; learnedFrom: number; timeout: number; gc: number | null; changed: boolean }
 export interface RipConfig { enabled: boolean; networks: { net: number; mask: number }[]; updateUs: number; timeoutUs: number; gcUs: number; splitHorizon: boolean; poisonReverse: boolean; routes: RipRoute[]; sock: number | null; gen: number }

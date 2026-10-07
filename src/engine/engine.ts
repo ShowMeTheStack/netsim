@@ -139,6 +139,18 @@ export function advance(st: EngineState, untilT: number, maxEvents: number, stop
 }
 export function stepEvent(st: EngineState) { return advance(st, Infinity, 1); }
 export function stepPacket(st: EngineState) { return advance(st, Infinity, 1_000_000, true); }
+/** Advance until a C program's syscall state changes (it blocks, resumes, starts or exits), so a
+ *  student can watch their code progress one blocking call at a time. Stops at idle/breakpoint too. */
+export function stepSyscall(st: EngineState, maxEvents = 500_000): RunResult {
+  const sig = () => { const parts: string[] = []; for (const n of Object.values(st.nodes)) if (isHost(n)) for (const p of Object.values(n.procs)) if (p.kind === 'cprog') parts.push(`${n.id}:${p.pid}:${p.blocked ? p.blocked.syscall + ':' + (p.blocked.sock ?? '') : 'run'}:${p.done ? 'd' : ''}`); return parts.sort().join('|'); };
+  const before = sig(); let total = 0;
+  for (;;) {
+    const r = advance(st, Infinity, 1);
+    total += r.events;
+    if (r.idle || r.hit) return { events: total, hit: r.hit, idle: r.idle, stoppedOnPacket: false };
+    if (sig() !== before || total >= maxEvents) return { events: total, hit: null, idle: false, stoppedOnPacket: false };
+  }
+}
 /** Time of the next pending event, or null if the queue is empty. */
 export function nextEventTime(st: EngineState): number | null { const e = heapPeek(st.events); return e ? e.t : null; }
 export function housekeeping(st: EngineState) { for (const n of Object.values(st.nodes)) if (n.type === 'switch') switchExpireMacs(n, st.time); }

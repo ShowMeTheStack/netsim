@@ -9,6 +9,8 @@ import { serializeSession, parseSession } from '@/session/session';
 import { DEFAULT_SWITCH_SCRIPT } from './devices/switch-script';
 void DEFAULT_SWITCH_SCRIPT;
 import { SEC } from './core';
+import { compileAndStart } from './apps/cprog';
+import { startClangProgram, registerClangProgram } from './apps/clangrun';
 import type { Cmd, Msg, RunMode, UiState } from '@/shared/protocol';
 import type { EngineState, SnifferId } from './types';
 
@@ -95,6 +97,7 @@ function handle(c: Cmd) {
     case 'pause': setMode('paused'); return;
     case 'stepEvent': setMode('paused'); afterRun(E.stepEvent(st)); break;
     case 'stepPacket': setMode('paused'); afterRun(E.stepPacket(st)); break;
+    case 'stepSyscall': setMode('paused'); afterRun(E.stepSyscall(st)); break;
     case 'setSpeed': speed = c.speed; break;
     case 'restart': setMode('paused'); E.coldRestart(st); for (const k of Object.keys(sent)) sent[Number(k)] = 0; for (const s of Object.values(st.sniffers)) post({ type: 'capture', snifferId: s.id, frames: [], reset: true }); break;
     case 'exportSession': post({ type: 'session', json: serializeSession(st, { theme: c.theme }) }); return;
@@ -122,9 +125,42 @@ function handle(c: Cmd) {
     case 'addAirMonitor': E.addAirMonitor(st, c.channel); break;
     case 'removeAirMonitor': delete st.rf.monitors[c.id]; break;
     case 'loadScenario': { try { const f = parseSession(c.json); setMode('paused'); st = f.state; E.ensureServices(st); for (const k of Object.keys(sent)) delete sent[Number(k)]; post({ type: 'imported', theme: f.ui?.theme }); } catch (e) { post({ type: 'error', message: (e as Error).message }); } break; }
+    case 'compileRun': {
+      const n = st.nodes[c.node]; if (!isHost(n)) break;
+      if (c.backend === 'clang') { void compileRunClang(c.node, c.name, c.source, c.argv); break; }
+      const r = compileAndStart(st, n, c.source, c.name, c.argv, c.backend);
+      if ('diagnostics' in r) post({ type: 'compile', node: c.node, ok: false, diagnostics: r.diagnostics }); else post({ type: 'compile', node: c.node, ok: true, pid: r.pid, diagnostics: [] });
+      break;
+    }
     case 'requestState': break;
   }
   postState(true);
+}
+// Compile real C with the in-browser clang toolchain (lazy-loaded; assets fetched same-origin from
+// /csys/ = the opt-in C download) and run it. Async and fire-and-forth; results come back as a
+// 'compile' message. The heavy modules (clang ~31MB, binaryen) load only when C is actually used.
+async function compileRunClang(node: number, name: string, source: string, argv: string[]) {
+  const n = st.nodes[node]; if (!isHost(n)) return;
+  const err = (message: string) => post({ type: 'compile', node, ok: false, diagnostics: [{ line: 1, col: 1, message, severity: 'error' }] });
+  try {
+    const { clangCompile, finalizeWasm } = await import('./cc/clang');
+    // binaryen is served from /csys/ (part of the opt-in C download) and loaded at runtime so Vite
+    // never bundles its multi-MB minified source (which crashes the bundler's token scanner). The
+    // specifier is computed so the bundler cannot try to resolve it at build time.
+    const binaryenUrl = '/csys/' + 'binaryen.mjs';
+    const bmod = await import(/* @vite-ignore */ binaryenUrl);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const binaryen = (bmod as { default: any }).default;
+    const r = await clangCompile(source, {
+      readBuffer: async (f: string) => { const res = await fetch(`/csys/${f}`); if (!res.ok) throw new Error(`fetch /csys/${f}: ${res.status}`); return new Uint8Array(await res.arrayBuffer()); },
+      asyncify: (wasm: Uint8Array) => finalizeWasm(binaryen, wasm),
+    });
+    if (!r.ok) { post({ type: 'compile', node, ok: false, diagnostics: r.diagnostics }); return; }
+    registerClangProgram(name, r.wasm);   // make it exec()-able by name
+    const p = startClangProgram(st, n, r.wasm, name, argv);
+    if (typeof p === 'string') { err(p); return; }
+    post({ type: 'compile', node, ok: true, pid: p.pid, diagnostics: [] }); postState(true);
+  } catch (e) { err(`C toolchain failed to load: ${(e as Error).message}`); }
 }
 function parseNets(expr: string): { net: number; mask: number }[] { return expr.split(/[,\n]+/).map(x => x.trim()).filter(Boolean).map(x => { const { ip, mask } = parseCidr(x); return { net: (ip & mask) >>> 0, mask }; }); }
 self.onmessage = (ev: MessageEvent<Cmd>) => { try { handle(ev.data); } catch (e) { post({ type: 'error', message: (e as Error).message }); postState(true); } };

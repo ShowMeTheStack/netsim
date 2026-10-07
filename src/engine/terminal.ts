@@ -9,6 +9,7 @@ import { setDefaultGateway, addStaticRoute } from './engine';
 import { startTraceroute } from './apps/traceroute';
 import { startIperfServer, startIperfClient } from './apps/iperf';
 import { startNcListen, startNcConnect } from './apps/nc';
+import { startProgram, PROGRAM_NAMES } from './apps/cprog';
 import { arpSpoof } from './devices/host';
 import { killProc } from './apps/procs';
 import { tcpStateSummary } from './stack/tcp';
@@ -21,6 +22,7 @@ const HELP = [
   '  iperf -s [-u] [-p PORT] [-R BYTES/S]                     bandwidth server (-R: slow reader for flow-control demos)',
   '  iperf -c IP [-u] [-p PORT] [-t SEC] [-n BYTES] [-b BPS] [-l LEN]   bandwidth client',
   '  nc -l PORT [-u] [-k] | nc IP PORT [-u] MESSAGE...       netcat: listen / send a message',
+  '  crun [PROGRAM [ARGS...]]                                run a C socket program (no arg: list programs)',
   '  dig [@server] [TYPE] name | nslookup name                lookup DNS (A/NS/CNAME/MX/TXT/SOA)',
   '  curl [-I] [-0] [--pipeline] [--no-recurse] URL           fetch a page and its embedded resources',
   '  httpd [-p PORT] | dhclient [IF]                          start web server / request a DHCP lease',
@@ -52,8 +54,9 @@ export function runCommand(st: EngineState, h: HostState, line: string) {
       case 'traceroute': case 'tracert': cmdTraceroute(st, h, a); break;
       case 'iperf': case 'iperf3': cmdIperf(st, h, a); break;
       case 'nc': case 'netcat': cmdNc(st, h, a); break;
+      case 'crun': cmdCrun(st, h, a); break;
       case 'netstat': case 'ss': cmdNetstat(h); break;
-      case 'ps': for (const p of Object.values(h.procs)) term(h, `${String(p.pid).padStart(5)}  ${p.kind}${p.kind === 'ping' || p.kind === 'traceroute' ? ' ' + p.targetStr : p.kind === 'iperf' ? ` -${p.role === 'server' ? 's' : 'c'}${p.udp ? ' -u' : ''} port ${p.port}` : p.kind === 'nc' ? ` ${p.role} ${p.port}` : ''}`); if (!Object.keys(h.procs).length) term(h, '(no processes)'); break;
+      case 'ps': for (const p of Object.values(h.procs)) term(h, `${String(p.pid).padStart(5)}  ${p.kind}${p.kind === 'ping' || p.kind === 'traceroute' ? ' ' + p.targetStr : p.kind === 'iperf' ? ` -${p.role === 'server' ? 's' : 'c'}${p.udp ? ' -u' : ''} port ${p.port}` : p.kind === 'nc' ? ` ${p.role} ${p.port}` : p.kind === 'cprog' ? ` ${p.name}${p.blocked ? ` [${p.blocked.syscall}]` : ''}` : ''}`); if (!Object.keys(h.procs).length) term(h, '(no processes)'); break;
       case 'kill': { const p = h.procs[Number(a[0])]; if (!p) term(h, `kill: (${a[0]}) - No such process`); else { killProc(st, h, p); term(h, `[${p.pid}] terminated`); } break; }
       case 'arp': cmdArp(st, h, a); break;
       case 'ifconfig': cmdIfconfig(h); break;
@@ -107,6 +110,13 @@ function cmdNc(st: EngineState, h: HostState, a: string[]) {
   if (rest[0] === '-l') { const port = Number(rest[1]); if (!port) { term(h, 'usage: nc -l port [-u] [-k]'); return; } const r = startNcListen(st, h, port, udp, keep); if (typeof r === 'string') term(h, `nc: ${r}`); return; }
   const dst = needIp(h, rest[0], 'host'); if (dst === null) return; const port = Number(rest[1]); if (!port) { term(h, 'usage: nc host port [-u] message...'); return; }
   const r = startNcConnect(st, h, dst, port, udp, rest.slice(2).join(' ') || 'hello'); if (typeof r === 'string') term(h, `nc: ${r}`);
+}
+function cmdCrun(st: EngineState, h: HostState, a: string[]) {
+  const name = a[0];
+  if (!name) { term(h, 'C socket programs (run with: crun <name> [args...]):'); for (const n of PROGRAM_NAMES) term(h, `  ${n}`); return; }
+  const r = startProgram(st, h, name, a.slice(1));
+  if (typeof r === 'string') { term(h, `crun: ${r}`); return; }
+  term(h, `[${r.pid}] ${name} started — press Play, Step or Turbo to run`);
 }
 function cmdNetstat(h: HostState) {
   term(h, 'Proto  Local Address          Foreign Address        State         PID');
