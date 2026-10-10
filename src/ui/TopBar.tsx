@@ -9,6 +9,7 @@ export function TopBar() {
   const exportSession = useSim(s => s.exportSession); const importSession = useSim(s => s.importSession); const fileRef = useRef<HTMLInputElement>(null);
   const mode = st?.mode ?? 'paused'; const t = st ? (st.time / 1e6).toFixed(6) : '0.000000';
   const runHint = useSim(pendingWhilePaused);
+  const hasCprog = !!st && Object.values(st.nodes).some(n => (n.type === 'host' || n.type === 'router') && Object.values((n as { procs: Record<number, { kind: string }> }).procs).some(p => p.kind === 'cprog'));
   return (
     <div className="topbar">
       <span className="brand">NetSim</span>
@@ -16,6 +17,7 @@ export function TopBar() {
       <button data-testid="btn-turbo" className={mode === 'turbo' ? 'active' : ''} title="Run as fast as possible until idle or breakpoint" onClick={() => send({ type: mode === 'turbo' ? 'pause' : 'turbo' })}>{mode === 'turbo' ? '⏸ Stop' : '⏩ Turbo'}</button>
       <button data-testid="btn-step-event" title="Advance one event" onClick={() => send({ type: 'stepEvent' })}>⏭ Event</button>
       <button data-testid="btn-step-packet" title="Advance to next packet milestone" onClick={() => send({ type: 'stepPacket' })}>⏭ Packet</button>
+      {hasCprog && <button data-testid="btn-step-syscall" title="Advance until a C program's next syscall (block/resume/exit)" onClick={() => send({ type: 'stepSyscall' })}>⏭ Syscall</button>}
       <button data-testid="btn-restart" title="Cold restart: keep topology, reset time to 0" onClick={() => send({ type: 'restart' })}>↺ Restart</button>
       <label className="muted">speed <select data-testid="speed" value={st?.speed ?? 1} onChange={e => send({ type: 'setSpeed', speed: Number(e.target.value) })}>{SPEEDS.map(s => <option key={s} value={s}>{s}×</option>)}</select></label>
       <span className="time" data-testid="sim-time">t = {t} s</span>
@@ -23,6 +25,7 @@ export function TopBar() {
       {runHint && <span className="run-hint" data-testid="run-hint">⏸ paused — press ▶ Play, ⏭ Step or ⏩ Turbo to run</span>}
       <span className="spacer" />
       <button data-testid="labs" onClick={() => useSim.getState().setLabLauncher(true)}>📚 Labs</button>
+      <button data-testid="btn-tour" title="Show the welcome tour" onClick={() => useSim.getState().setTourOpen(true)}>❔ Tour</button>
       <button data-testid="btn-new" onClick={() => { if (confirm('Start a new empty session? Unsaved work is lost.')) send({ type: 'newSession' }); }}>New</button>
       <button data-testid="btn-save" onClick={exportSession}>💾 Save</button>
       <button data-testid="btn-load" onClick={() => fileRef.current?.click()}>📂 Load</button>

@@ -9,6 +9,7 @@ import { BottomPanel } from './BottomPanel';
 import { NodePopup } from './NodePopup';
 import { LinkPopup } from './LinkPopup';
 import { LabLauncher } from './LabLauncher';
+import { Tour } from './Tour';
 
 export function App() {
   const error = useSim(s => s.error); const toast = useSim(s => s.toast); const dismiss = useSim(s => s.dismissError); const showToast = useSim(s => s.showToast);
@@ -28,6 +29,7 @@ export function App() {
       <SnifferPanel />
       <BottomPanel />
       <LabLauncher />
+      <Tour />
       {popupNode !== null && <NodePopup id={popupNode} />}
       {popupLink !== null && <LinkPopup id={popupLink} />}
       {error && <div className="error" data-testid="error" onClick={dismiss}>{error} (click to dismiss)</div>}

@@ -56,7 +56,9 @@ tr.proto-HTTP { background: var(--proto-http); } tr.proto-VLAN { background: var
    and canvas stay visible and usable while a node/link popup is open and being dragged. */
 .modal-backdrop { position: fixed; inset: 0; background: transparent; pointer-events: none; display: flex; align-items: center; justify-content: center; z-index: 20; }
 .modal-backdrop > .modal { pointer-events: auto; }
-.modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; width: 720px; max-width: 95vw; height: 520px; max-height: 90vh; display: grid; grid-template-rows: auto auto 1fr; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+/* Height adapts to the active tab's content (no dead space below short tabs); tall tabs - terminal,
+   code - carry their own height and the modal grows to fit, up to the viewport cap. */
+.modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; width: 760px; max-width: 95vw; height: auto; max-height: 90vh; display: grid; grid-template-rows: auto auto 1fr; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
 .modal .head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: move; user-select: none; }
 .modal .head input { cursor: text; }
 .drag-grip { color: var(--fg2); font-size: 12px; letter-spacing: -3px; }
@@ -65,7 +67,7 @@ tr.proto-HTTP { background: var(--proto-http); } tr.proto-VLAN { background: var
 .form { display: grid; grid-template-columns: 140px 1fr; gap: 8px 12px; align-items: center; max-width: 520px; }
 .form label { color: var(--fg2); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.terminal { display: grid; grid-template-rows: 1fr auto; height: 100%; min-height: 0; }
+.terminal { display: grid; grid-template-rows: 1fr auto; height: 440px; min-height: 0; }
 .terminal .out { background: #000; color: #d6ffd6; font-family: var(--mono); font-size: 12.5px; padding: 8px; overflow: auto; white-space: pre-wrap; border-radius: 6px; }
 .terminal .in { display: flex; gap: 6px; margin-top: 6px; }
 .terminal .in input { flex: 1; font-family: var(--mono); }
@@ -150,3 +152,35 @@ table.simple th, table.simple td { text-align: left; padding: 3px 8px; border-bo
 @keyframes runhint-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 .run-hint { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 12px; background: var(--accent); color: var(--accent-fg); font-size: 11.5px; font-weight: 600; white-space: nowrap; animation: runhint-pulse 1.6s ease-in-out infinite; }
 .term-hint { margin: 6px 0 0; padding: 5px 8px; border-radius: 6px; background: var(--bg3); color: var(--accent); font-size: 11.5px; border: 1px solid var(--accent); animation: runhint-pulse 1.6s ease-in-out infinite; }
+
+/* ---- Code tab (full width, editor fills the popup) ---- */
+.code { display: flex; flex-direction: column; gap: 8px; height: 544px; }
+.code-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.code-controls label { color: var(--fg2); }
+.code-controls select { flex: 1 1 200px; min-width: 160px; }
+.code-blurb { color: var(--fg2); font-size: 12px; line-height: 1.45; }
+.code-editor { display: flex; gap: 10px; flex: 1 1 auto; min-height: 160px; }
+.code-editor textarea { flex: 1 1 auto; width: 100%; height: 100%; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; white-space: pre; overflow: auto; tab-size: 4; resize: none; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.code-editor textarea:focus { outline: none; border-color: var(--accent); }
+.api-ref { flex: 0 0 248px; max-width: 248px; overflow: auto; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.api-ref .api-group { color: var(--fg2); text-transform: uppercase; letter-spacing: .5px; font-size: 10px; font-weight: 700; margin: 10px 0 4px; }
+.api-ref .api-group:first-child { margin-top: 0; }
+.api-ref .api-entry { margin-bottom: 7px; }
+.api-ref .api-entry code { font-weight: 600; color: var(--accent); }
+.api-ref .api-entry .api-sig { color: var(--fg2); font-family: var(--mono); font-size: 10.5px; word-break: break-word; margin: 1px 0; }
+.api-ref .api-entry .api-desc { line-height: 1.4; }
+.code-diag { font-family: var(--mono); font-size: 12px; background: var(--bg3); border-radius: 6px; padding: 6px 8px; }
+.code-diag.ok { color: var(--ok); }
+.code-console { background: #000; color: #d6ffd6; font-family: var(--mono); font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: 8px; margin: 0; max-height: 150px; min-height: 54px; overflow: auto; white-space: pre-wrap; }
+
+/* ---- Tour (compact, centered, stepper) ---- */
+.tour { width: 440px; max-width: 92vw; }
+.tour .body { padding: 16px 18px 18px; }
+.tour-art { font-size: 30px; line-height: 1; margin-bottom: 8px; }
+.tour-title { margin: 0 0 8px; font-size: 17px; }
+.tour-text { margin: 0; line-height: 1.55; color: var(--fg); }
+.tour-list { margin: 8px 0 0; padding-left: 18px; line-height: 1.6; }
+.tour-foot { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.tour-dots { display: flex; gap: 6px; }
+.tour-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
+.tour-dot.on { background: var(--accent); }

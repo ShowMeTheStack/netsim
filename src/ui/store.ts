@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import type { Cmd, Msg, UiState } from '@/shared/protocol';
 import type { CapturedFrame, NodeId, LinkId, SnifferId, HostKind } from '@/engine/types';
+import type { CDiagnostic } from '@/shared/cprograms';
 import { THEMES, applyTheme } from './themes';
+
+export interface CompileResult { ok: boolean; diagnostics: CDiagnostic[]; pid?: number; at: number }
 
 export type Tool = { kind: 'select' } | { kind: 'connect' } | { kind: 'sniff' } | { kind: 'place'; nodeType: 'host' | 'switch' | 'router' | 'ap'; hostKind?: HostKind };
 
@@ -11,6 +14,9 @@ interface Store {
   popupNode: NodeId | null; popupLink: LinkId | null; popupTab: string;
   activeSniffer: SnifferId | null; selectedFrame: { sid: SnifferId; n: number } | null; displayFilters: Record<SnifferId, string>; activeAir: number | null; setActiveAir: (id: number | null) => void;
   hoverRange: { start: number; end: number } | null; theme: string; bottomTab: 'log' | 'breakpoints'; toast: string | null; labOpen: boolean; setLabOpen: (o: boolean) => void; labLauncher: boolean; setLabLauncher: (o: boolean) => void;
+  compileResults: Record<NodeId, CompileResult>; compileRun: (node: NodeId, name: string, source: string, argv: string[], backend: 'clang' | 'nsc' | 'stub') => void;
+  tourOpen: boolean; setTourOpen: (o: boolean) => void;
+  clangStatus: 'idle' | 'downloading' | 'ready' | 'error'; enableClang: () => void;
   send: (c: Cmd) => void; setTool: (t: Tool) => void; select: (n: NodeId | null, l?: LinkId | null) => void;
   openNode: (id: NodeId | null, tab?: string) => void; openLink: (id: LinkId | null) => void; setPopupTab: (t: string) => void;
   setActiveSniffer: (id: SnifferId | null) => void; selectFrame: (f: { sid: SnifferId; n: number } | null) => void; setDisplayFilter: (sid: SnifferId, expr: string) => void;
@@ -31,6 +37,20 @@ export const useSim = create<Store>((set, get) => ({
   activeSniffer: null, selectedFrame: null, displayFilters: {}, hoverRange: null, activeAir: null,
   theme: (() => { try { return localStorage.getItem('netsim.theme') || THEMES[0]!.id; } catch { return THEMES[0]!.id; } })(),
   bottomTab: 'log', toast: null, labOpen: true, labLauncher: false,
+  compileResults: {},
+  compileRun: (node, name, source, argv, backend) => getWorker().postMessage({ type: 'compileRun', node, name, source, argv, backend } satisfies Cmd),
+  tourOpen: (() => { try { return localStorage.getItem('netsim.tourSeen') !== '1'; } catch { return false; } })(),
+  setTourOpen: (o) => { if (!o) { try { localStorage.setItem('netsim.tourSeen', '1'); } catch { /* ignore */ } } set({ tourOpen: o }); },
+  clangStatus: 'idle',
+  // Pre-fetch the ~60MB C toolchain so it is in the browser cache before the first clang compile.
+  // Same-origin; nothing is exposed. The worker reads the same cached files.
+  enableClang: () => {
+    if (get().clangStatus === 'downloading' || get().clangStatus === 'ready') return;
+    set({ clangStatus: 'downloading' });
+    Promise.all(['clang.wasm', 'lld.wasm', 'sysroot.tar', 'memfs.wasm'].map(f => fetch(`/csys/${f}`).then(r => { if (!r.ok) throw new Error(f); return r.arrayBuffer(); })))
+      .then(() => set({ clangStatus: 'ready' }))
+      .catch(() => set({ clangStatus: 'error' }));
+  },
   send: (c) => getWorker().postMessage(c),
   setTool: (tool) => set({ tool, connectFrom: null }),
   select: (n, l = null) => set({ selectedNode: n, selectedLink: l }),
@@ -90,6 +110,7 @@ export function initWorker() {
       case 'session': downloadText(`netsim-session-${new Date().toISOString().replace(/[:.]/g, '-')}.json`, m.json); useSim.getState().showToast('Session saved'); break;
       case 'imported': useSim.setState({ captures: {}, selectedFrame: null, selectedNode: null, selectedLink: null, popupNode: null, popupLink: null, labOpen: true }); if (m.theme) useSim.getState().setTheme(m.theme); useSim.getState().showToast('Session loaded'); break;
       case 'error': useSim.setState({ error: m.message }); break;
+      case 'compile': useSim.setState({ compileResults: { ...s.compileResults, [m.node]: { ok: m.ok, diagnostics: m.diagnostics, pid: m.pid, at: Date.now() } } }); break;
     }
   };
   w.postMessage({ type: 'requestState' } satisfies Cmd);

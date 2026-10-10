@@ -3,6 +3,7 @@ import { useSim, pendingWhilePaused } from './store';
 import { u32ToIp, maskToPrefix, isValidIp } from '@/shared/bytes';
 import { isHost, type HostState, type SwitchState, type CcName } from '@/engine/types';
 import { SocketsTab } from './TcpPanel';
+import { CodeTab } from './CodeTab';
 import { ServicesTab } from './Services';
 import { HttpWaterfall } from './HttpPanel';
 import { RoutingTab, NatTab } from './RoutingPanel';
@@ -15,7 +16,7 @@ export function NodePopup({ id }: { id: number }) {
   const n = useSim(s => s.st?.nodes[id]); const tab = useSim(s => s.popupTab); const setTab = useSim(s => s.setPopupTab); const close = () => useSim.getState().openNode(null);
   const send = useSim(s => s.send); const drag = useDragOffset();
   if (!n) return null;
-  const tabs = isAp(n) ? ['wireless'] : isHost(n) ? (n.type === 'router' ? ['config', 'terminal', 'routing', 'nat', 'services', 'sockets', 'arp', 'routes', 'stats'] : ['config', 'terminal', 'services', 'sockets', 'http', 'arp', 'routes', 'stats']) : ['ports', 'vlans', 'script', 'mac', 'stats'];
+  const tabs = isAp(n) ? ['wireless'] : isHost(n) ? (n.type === 'router' ? ['config', 'terminal', 'routing', 'nat', 'services', 'sockets', 'code', 'arp', 'routes', 'stats'] : ['config', 'terminal', 'services', 'sockets', 'code', 'http', 'arp', 'routes', 'stats']) : ['ports', 'vlans', 'script', 'mac', 'stats'];
   const cur = tabs.includes(tab) ? tab : tabs[0]!;
   return (
     <div className="modal-backdrop" data-testid="popup-backdrop">
@@ -30,6 +31,7 @@ export function NodePopup({ id }: { id: number }) {
           {isHost(n) && cur === 'nat' && <NatTab h={n} />}
           {isHost(n) && cur === 'services' && <ServicesTab h={n} />}
           {isHost(n) && cur === 'sockets' && <SocketsTab h={n} />}
+          {isHost(n) && cur === 'code' && <CodeTab h={n} />}
           {isHost(n) && cur === 'http' && <HttpWaterfall h={n} />}
           {isHost(n) && cur === 'arp' && <ArpTab h={n} />}
           {isHost(n) && cur === 'routes' && <RoutesTab h={n} />}
