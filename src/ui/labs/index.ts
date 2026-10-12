@@ -18,6 +18,7 @@ import { HTTP_LABS } from './15-http';
 import { WIRELESS_LABS } from './16-wireless';
 import { SECURITY_LABS } from './17-security';
 import { CAPSTONE_LABS } from './18-capstones';
+import { SOCKETS_C, SOCKETS_C_MODULE } from './19-sockets-c';
 
 export const MODULES: LabModule[] = [
   { id: 'start', name: 'Getting Started', blurb: 'the workspace, packets, and the sniffer' },
@@ -38,9 +39,10 @@ export const MODULES: LabModule[] = [
   { id: 'wireless', name: 'Wireless', blurb: '802.11, CSMA/CA, and the air' },
   { id: 'security', name: 'Security', blurb: 'attacks and defenses' },
   { id: 'capstone', name: 'Capstones', blurb: 'build and troubleshoot whole networks' },
+  SOCKETS_C_MODULE,
 ];
 export const ALL_LABS: Lab[] = [
   ...GETTING_STARTED, ...LINK_LAYER, ...SWITCHING, ...ARP_LABS, ...VLAN_LABS, ...IPV4_LABS, ...FRAG_ICMP,
   ...STATIC_ROUTING, ...RIP_LABS, ...OSPF_LABS, ...BGP_LABS, ...NAT_LABS, ...TRANSPORT_LABS, ...DHCP_DNS,
-  ...HTTP_LABS, ...WIRELESS_LABS, ...SECURITY_LABS, ...CAPSTONE_LABS,
+  ...HTTP_LABS, ...WIRELESS_LABS, ...SECURITY_LABS, ...CAPSTONE_LABS, ...SOCKETS_C,
 ];
