@@ -1,6 +1,6 @@
 // Thorough per-lab verification: for EVERY lab, build its topology, apply the intended solution
 // (the same actions its steps describe), advance the simulation, and assert that ALL of its
-// checks pass. This proves each of the 70 labs is genuinely completable, not merely well-formed.
+// checks pass. This proves each of the 81 labs is genuinely completable, not merely well-formed.
 import { describe, it, expect } from 'vitest';
 import { ALL_LABS } from '@/ui/labs';
 import { parseSession } from '@/session/session';
@@ -8,7 +8,19 @@ import { advance, ensureServices, addStaticRoute, setIfaceIp, setDefaultGateway,
 import { rebuildConnectedRoutes } from '@/engine/devices/host';
 import { DEFAULT_SWITCH_SCRIPT } from '@/engine/devices/switch-script';
 import { runCommand } from '@/engine/terminal';
+import { startProgram, compileAndStart } from '@/engine/apps/cprog';
+import { startClangProgram } from '@/engine/apps/clangrun';
+// @ts-expect-error Node builtin available at test runtime (no @types/node in tsconfig).
+import { readFileSync } from 'fs';
+import { CPROGRAMS } from '@/shared/cprograms';
+const fx = (n: string) => new Uint8Array(readFileSync(new URL(`../fixtures/${n}`, import.meta.url)) as Uint8Array);
+const THREADED_SERVER_FIXTURE = fx('clang-threaded-server.wasm');
+const SELECT_FIXTURE = fx('clang-select-server.wasm');
+const POLL_FIXTURE = fx('clang-poll-server.wasm');
+const EPOLL_FIXTURE = fx('clang-epoll-server.wasm');
+const EINTR_FIXTURE = fx('clang-eintr.wasm');
 import { ipToU32 as ip, prefixToMask as mask } from '@/shared/bytes';
+const csrc = (n: string) => CPROGRAMS.find(p => p.name === n)!.source;
 import { SEC } from '@/engine/core';
 import type { EngineState, HostState } from '@/engine/types';
 
@@ -109,13 +121,29 @@ const SOLVERS: Record<string, (st: EngineState, b: ByName) => void> = {
   'cap-enterprise': (st, b) => { const gw = b('Gateway'); gw.dhcpServer.enabled = true; ensureServices(st); cmd(st, b('Server'), 'httpd'); cmd(st, b('Client'), 'dhclient'); run(st, 10); cmd(st, b('Client'), 'dig intranet.corp'); run(st, 12); cmd(st, b('Client'), 'curl http://intranet.corp/'); run(st, 12); },
   'cap-troubleshoot': (st, b) => { addStaticRoute(b('R2'), ip('10.0.1.0'), mask(24), ip('10.0.12.1')); cmd(st, b('PC-A'), 'ping -c 3 10.0.2.10'); run(st, 14); },
   'cap-secure': (st, b) => { cmd(st, b('Attacker'), 'arpspoof 10.0.0.1'); run(st, 4); cmd(st, b('Victim'), 'arp -s 10.0.0.1 02:00:00:03:00:00'); cmd(st, b('Attacker'), 'arpspoof 10.0.0.1'); run(st, 4); },
+  // ---- Socket Programming in C ---- (the intended solution: run the programs the Code tab offers)
+  'sock-udp-send': (st, b) => { startProgram(st, b('Server'), 'udp-echo-server', ['7']); compileAndStart(st, b('Client'), csrc('udp-send-nsc'), 'udp-send-nsc', ['10.0.0.1', '7'], 'nsc'); run(st, 30); },
+  'sock-tcp-client': (st, b) => { startProgram(st, b('Server'), 'echo-server', ['7']); compileAndStart(st, b('Client'), csrc('tcp-client-nsc'), 'tcp-client-nsc', ['10.0.0.1', '7'], 'nsc'); run(st, 120); },
+  'sock-tcp-server': (st, b) => { compileAndStart(st, b('Server'), csrc('tcp-server-nsc'), 'tcp-server-nsc', ['0.0.0.0', '7'], 'nsc'); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'hello', 'world']); run(st, 120); },
+  'sock-handshake': (st, b) => { startProgram(st, b('Server'), 'echo-server', ['7']); compileAndStart(st, b('Client'), csrc('tcp-client-nsc'), 'tcp-client-nsc', ['10.0.0.1', '7'], 'nsc'); run(st, 120); },
+  'sock-blocking': (st, b) => { startProgram(st, b('Server'), 'echo-server', ['7']); compileAndStart(st, b('Client'), csrc('tcp-client-nsc'), 'tcp-client-nsc', ['10.0.0.1', '7'], 'nsc'); run(st, 120); },
+  'sock-capstone': (st, b) => { compileAndStart(st, b('Server'), csrc('tcp-server-nsc'), 'tcp-server-nsc', ['0.0.0.0', '7'], 'nsc'); compileAndStart(st, b('Client'), csrc('tcp-client-nsc'), 'tcp-client-nsc', ['10.0.0.1', '7'], 'nsc'); run(st, 120); },
+  // The threaded server needs full C (pthreads), so it runs from the committed fixture instead of the
+  // ~60MB clang toolchain this headless test must not require; the clients are reference generators.
+  'sock-threads': (st, b) => { startClangProgram(st, b('Server'), THREADED_SERVER_FIXTURE, 'threaded-server', ['7']); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'alpha']); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'bravo']); run(st, 180); },
+  // select/poll/epoll multiplexing servers + the EINTR demo need full C, so they run from committed
+  // fixtures (this headless test must not require the ~60MB clang toolchain); clients are generators.
+  'sock-select': (st, b) => { startClangProgram(st, b('Server'), SELECT_FIXTURE, 'select-server', ['7']); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'alpha']); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'bravo']); run(st, 180); },
+  'sock-poll': (st, b) => { startClangProgram(st, b('Server'), POLL_FIXTURE, 'poll-server', ['7']); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'alpha']); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'bravo']); run(st, 180); },
+  'sock-epoll': (st, b) => { startClangProgram(st, b('Server'), EPOLL_FIXTURE, 'epoll-server', ['7']); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'alpha']); startProgram(st, b('Client'), 'echo-client', ['10.0.0.1', '7', 'bravo']); run(st, 180); },
+  'sock-eintr': (st, b) => { startClangProgram(st, b('Server'), EINTR_FIXTURE, 'eintr-demo', []); run(st, 30); },
 };
 
 describe('every lab is completable (all checks pass after the intended solution)', () => {
   it('has a solver for all 70 labs', () => {
     const missing = ALL_LABS.filter(l => !SOLVERS[l.id]).map(l => l.id);
     expect(missing, 'labs missing a solver: ' + missing.join(', ')).toEqual([]);
-    expect(ALL_LABS.length).toBe(70);
+    expect(ALL_LABS.length).toBe(81);
   });
   for (const lab of ALL_LABS) {
     it(`${lab.id} — ${lab.name}`, () => {

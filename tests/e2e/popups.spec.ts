@@ -53,11 +53,12 @@ async function linkMid(page: Page) {
 }
 
 // ---------------------------------------------------------------------------
-test('every one of the 70 labs loads, renders nodes, and throws no console errors', async ({ page }) => {
+test('every one of the 81 labs loads, renders nodes, and throws no console errors', async ({ page }) => {
+  test.setTimeout(150_000);   // launches every lab serially; needs headroom under full-suite load
   const errs = collectErrors(page);
   await page.goto('/');
   const ids: string[] = await page.evaluate(() => (window as any).__labs.ids);
-  expect(ids.length).toBe(70);
+  expect(ids.length).toBe(81);
   const bad: any[] = [];
   for (const id of ids) {
     await page.getByTestId('labs').click();

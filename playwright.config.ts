@@ -13,6 +13,9 @@ export default defineConfig({
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
+    // Seed the "welcome tour seen" flag so the first-run tour modal does not block interaction in
+    // specs that are not about the tour. The tour's own spec clears it via addInitScript.
+    storageState: 'tests/e2e/.storage.json',
   },
   webServer: {
     command: 'npm run preview',

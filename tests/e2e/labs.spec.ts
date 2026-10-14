@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 // Every lab must: build a valid session (no engine error), load into the drawer with steps,
 // and expose its checks. We drive the launcher and load each lab, asserting the drawer renders.
-test('all 70 labs build valid, self-consistent sessions', async ({ page }) => {
+test('all 81 labs build valid, self-consistent sessions', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push('PAGEERROR ' + e.message));
   await page.goto('/');
@@ -15,8 +15,8 @@ test('all 70 labs build valid, self-consistent sessions', async ({ page }) => {
     }
     return { count: L.ids.length, unique: new Set(L.ids).size, modules: L.modules.length, out };
   });
-  expect(report.count).toBe(70);
-  expect(report.unique).toBe(70);
+  expect(report.count).toBe(81);
+  expect(report.unique).toBe(81);
   const bad = report.out.filter(r => !r.ok);
   expect(bad, 'labs that failed to build: ' + JSON.stringify(bad, null, 2)).toEqual([]);
   // every check id referenced by a step exists in that lab's checks is covered by the drawer; here we assert structure.
@@ -24,11 +24,11 @@ test('all 70 labs build valid, self-consistent sessions', async ({ page }) => {
   expect(errors, errors.join('\n')).toEqual([]);
 });
 
-test('the launcher lists all 70 labs and loading one shows the guided drawer', async ({ page }) => {
+test('the launcher lists all 81 labs and loading one shows the guided drawer', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('labs').click();
   await expect(page.getByTestId('lab-launcher')).toBeVisible();
-  await expect(page.locator('[data-testid^="launch-"]')).toHaveCount(70);
+  await expect(page.locator('[data-testid^="launch-"]')).toHaveCount(81);
   await page.getByTestId('launch-tcp-handshake').click();
   await expect(page.getByTestId('lab-drawer')).toContainText('three-way handshake');
   await expect(page.getByTestId('lab-steps')).toBeVisible();
