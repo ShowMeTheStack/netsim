@@ -1,5 +1,5 @@
 // Link model: per-direction drop-tail queue, serialization delay, propagation delay, loss, manual impairments.
-import { schedule, milestone, capture, rand, annotateCapture, log } from './core';
+import { schedule, milestone, capture, rand, annotateCapture, log, tagFrame } from './core';
 import { decodeFrame } from './codecs/decode';
 import { compileFilter, evalFilter } from '@/filters/filter';
 import type { EngineState, LinkState, LinkDirName, NodeId, SimEvent, QueuedFrame } from './types';
@@ -25,6 +25,7 @@ export function nicTx(st: EngineState, node: NodeId, ifaceIdx: number, bytes: Ui
   const lf = linkFor(st, node, ifaceIdx); if (!lf) return false;
   const { link, dir, peer } = lf; const d = link[dir]; const im = link.impair;
   const frameId = st.nextFrameId++;
+  tagFrame(st, frameId, node);   // E2: record ground-truth provenance when a tx tag is active
   // manual impairments (evaluated at enqueue time)
   if ((im.dropNext > 0 || im.dupNext > 0 || im.delayNext > 0 || im.reorderNext > 0 || im.corruptNext > 0) && impairApplies(link, dir, bytes)) {
     if (im.dropNext > 0) { im.dropNext--; link.stats[dir === 'ab' ? 'abDrops' : 'baDrops']++; capture(st, link.id, { t: st.time, dir, bytes, from: node, to: peer, frameId, drop: 'manual drop' }); milestone(st, 'drop', link.id, frameId, node, bytes, 'manual drop'); log(st, `link ${link.id}: manually dropped frame ${frameId}`); return true; }

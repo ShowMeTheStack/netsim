@@ -24,6 +24,7 @@ import { term } from '../devices/host';
 import { timer } from '../core';
 import { tcpSocket, tcpListen, tcpConnect, tcpAccept, tcpSend, tcpRecv, tcpClose, tcpSendSpace } from '../stack/tcp';
 import { udpSocket, udpSend } from '../stack/udp';
+import { getScheduler } from '../cc/scheduler';
 import type { EngineState, HostState, CProc, Socket } from '../types';
 
 const EBADF = 8, EINTR = 27, ESPIPE = 70, ENOTSUP = 58;
@@ -75,6 +76,7 @@ interface Ctx {
   execTo: Uint8Array | null; execArgv: string[];
   pid: number;
   handlers: Record<number, number>;  // signum -> handler function-pointer (table index)
+  schedStep: number;                 // E3: monotonic scheduling-decision index (for the oracle)
 }
 const ctxs = new Map<string, Ctx>();
 // Programs available to exec() by name (populated when a clang program is compiled/run).
@@ -108,7 +110,7 @@ export function startClangProgram(st: EngineState, h: HostState, bytes: Uint8Arr
   try {
     const mod = new WebAssembly.Module(bytes as unknown as BufferSource);
     const memory = new WebAssembly.Memory({ initial: 258, maximum: 16384 });   // runtime-owned, so fork() can clone it
-    const c: Ctx = { inst: null as unknown as WebAssembly.Instance, mod, memory, exp: {}, sp: null, fibers: [], curFid: 0, nextTid: 1, rrIdx: 0, yieldStreak: 0, epolls: new Map(), execTo: null, execArgv: [], pid, handlers: {} };
+    const c: Ctx = { inst: null as unknown as WebAssembly.Instance, mod, memory, exp: {}, sp: null, fibers: [], curFid: 0, nextTid: 1, rrIdx: 0, yieldStreak: 0, epolls: new Map(), execTo: null, execArgv: [], pid, handlers: {}, schedStep: 0 };
     ctxs.set(rid, c);
     const imports = buildImports(st, h, p, rid) as { wasi_unstable: Record<string, unknown>; env: Record<string, unknown> };
     imports.env.memory = memory;
@@ -351,9 +353,23 @@ function runFiber(st: EngineState, h: HostState, p: CProc, c: Ctx, f: Fiber): 'p
 }
 
 function pickRunnable(c: Ctx): Fiber | null {
-  const n = c.fibers.length;
+  const sch = getScheduler();
+  if (sch) {   // E3: an oracle chooses the next runnable fiber (headless search only)
+    const runnable = c.fibers.filter(f => f.state === 'new' || f.state === 'ready');
+    if (runnable.length === 0) return null;
+    const fid = sch.choose({ pid: c.pid, step: c.schedStep++, runnable: runnable.map(f => f.fid) });
+    return runnable.find(f => f.fid === fid) ?? runnable[0]!;
+  }
+  const n = c.fibers.length;   // default: round-robin, bit-identical to before
   for (let i = 0; i < n; i++) { const f = c.fibers[(c.rrIdx + i) % n]!; if (f.state === 'new' || f.state === 'ready') { c.rrIdx = (c.rrIdx + i + 1) % n; return f; } }
   return null;
+}
+
+/** E3: a canonical summary of every live program's fibers, for search-state deduplication. */
+export function clangSchedSummary(): string {
+  const parts: string[] = [];
+  for (const [rid, c] of ctxs) for (const f of c.fibers) if (f.state !== 'done') parts.push(`${rid}#${f.fid}:${f.state}:${f.wait ? f.wait.kind + f.wait.sock : f.mwait ? 'm' : ''}`);
+  return parts.sort().join('|');
 }
 
 function schedule(st: EngineState, h: HostState, p: CProc, c: Ctx) {
@@ -394,7 +410,7 @@ function doFork(st: EngineState, h: HostState, parent: CProc, pc: Ctx, caller: F
   const pages = pc.memory.buffer.byteLength / 65536;
   const childMem = new WebAssembly.Memory({ initial: pages, maximum: 16384 });
   new Uint8Array(childMem.buffer).set(new Uint8Array(pc.memory.buffer));   // byte-for-byte clone at the fork point
-  const cc: Ctx = { inst: null as unknown as WebAssembly.Instance, mod: pc.mod, memory: childMem, exp: {}, sp: null, fibers: [], curFid: caller.fid, nextTid: pc.nextTid, rrIdx: 0, yieldStreak: 0, epolls: new Map(), execTo: null, execArgv: [], pid: childPid, handlers: { ...pc.handlers } };
+  const cc: Ctx = { inst: null as unknown as WebAssembly.Instance, mod: pc.mod, memory: childMem, exp: {}, sp: null, fibers: [], curFid: caller.fid, nextTid: pc.nextTid, rrIdx: 0, yieldStreak: 0, epolls: new Map(), execTo: null, execArgv: [], pid: childPid, handlers: { ...pc.handlers }, schedStep: 0 };
   ctxs.set(childRid, cc);
   const imports = buildImports(st, h, child, childRid) as { wasi_unstable: Record<string, unknown>; env: Record<string, unknown> };
   imports.env.memory = childMem;

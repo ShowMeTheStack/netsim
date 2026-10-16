@@ -7,6 +7,19 @@ import type { EngineState, SimEvent, SimEventBody, Milestone, LinkId, NodeId, Ca
 
 export const US = 1, MS = 1000, SEC = 1_000_000;
 
+// ---------- E2 provenance: ground-truth labels for transmitted frames ----------
+/** Record the origin of a just-minted frame, but only while a tx tag is active. Normal traffic has
+ *  no tag, so it stays unlabeled and defaults to "benign" in the sidecar. */
+export function tagFrame(st: EngineState, frameId: number, node: NodeId, pid?: number) {
+  if (st.txTag == null) return;
+  (st.frameOrigins ??= {})[frameId] = { tag: st.txTag, node, ...(pid !== undefined ? { pid } : {}) };
+}
+/** Run `fn` with a transmission label active, so every frame it causes to be sent is labeled. */
+export function withTxTag<T>(st: EngineState, tag: string | null, fn: () => T): T {
+  const prev = st.txTag ?? null; st.txTag = tag;
+  try { return fn(); } finally { st.txTag = prev; }
+}
+
 export function schedule(st: EngineState, delayUs: number, ev: SimEventBody): void {
   const t = st.time + Math.max(0, Math.round(delayUs));
   heapPush(st.events, { ...(ev as SimEvent), t, seq: st.seq++ });

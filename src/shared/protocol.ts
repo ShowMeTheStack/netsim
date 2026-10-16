@@ -43,11 +43,16 @@ export type Cmd =
   | { type: 'play' } | { type: 'pause' } | { type: 'turbo' } | { type: 'stepEvent' } | { type: 'stepPacket' } | { type: 'stepSyscall' } | { type: 'setSpeed'; speed: number } | { type: 'restart' }
   | { type: 'exportSession'; theme?: string } | { type: 'importSession'; json: string } | { type: 'newSession'; seed?: number }
   | { type: 'loadScenario'; json: string } | { type: 'requestState' }
+  | { type: 'exportCapsule' } | { type: 'replayCapsule'; json: string }
+  | { type: 'exportPcap'; snifferId: SnifferId; withLabels?: boolean; includeDropped?: boolean }
   | { type: 'compileRun'; node: NodeId; name: string; source: string; argv: string[]; backend: 'clang' | 'nsc' | 'stub' };
 export type Msg =
   | { type: 'state'; st: UiState }
   | { type: 'capture'; snifferId: SnifferId; frames: CapturedFrame[]; reset?: boolean }
   | { type: 'session'; json: string }
+  | { type: 'capsule'; json: string }
+  | { type: 'capsuleResult'; ok: boolean; gotHash: string; wantHash: string }
+  | { type: 'pcap'; snifferId: SnifferId; pcap: Uint8Array; labels?: string }
   | { type: 'imported'; theme?: string }
   | { type: 'error'; message: string }
   | { type: 'compile'; node: NodeId; ok: boolean; diagnostics: CDiagnostic[]; pid?: number }

@@ -201,6 +201,37 @@ and subnetting, fragmentation and ICMP, static routing, RIP, OSPF, BGP, NAT, tra
 with UDP and TCP, DHCP and DNS, HTTP, wireless, security, capstones, and socket
 programming in C.
 
+## Using it for research
+
+The same two properties that make NetSim a teaching tool, a run that is deterministic to
+the byte for a given seed and a stack whose packets are byte accurate, also make it a
+usable research instrument. A small set of capabilities builds on the engine without
+changing its default behavior:
+
+- **Reproducibility capsules** (`src/session/capsule.ts`) record a run as a setup, an
+  ordered list of commands and clock advances, and a SHA-256 hash over the whole engine
+  state. Replaying a capsule on a fresh engine reaches a byte-identical state, which the
+  tool verifies against the stored hash, so a result can be shared as a small object that
+  re-executes rather than a description.
+- **Labeled capture export** (`src/engine/export/pcap.ts`) writes any sniffed link to a
+  standard `libpcap` file that Wireshark, tshark, and Scapy read directly, with an
+  optional ground-truth label sidecar: the engine tags each frame it transmits, so the
+  labels are emitted, not inferred.
+- **A controlled-scheduler oracle** (`src/engine/cc/scheduler.ts`) exposes the one
+  scheduling choice in the C runtime, which runnable thread advances next, so an external
+  driver can explore and replay thread interleavings while packet events stay on the same
+  clock. With no oracle installed the runtime behaves exactly as before.
+- **A metrics library** (`src/engine/metrics.ts`) computes throughput, Jain fairness,
+  loss, round-trip time, and queue occupancy from engine state and captures.
+- **An interaction-trace recorder** (`src/ui/trace.ts`) logs learner actions for
+  education research, off by default and anonymized.
+- **A shared command path** (`src/engine/commands.ts`) applies a command to the engine
+  the same way in the browser worker, in a capsule replay, and in a headless sweep, so an
+  experiment driven in Node reproduces what the interface does.
+
+Everything here runs in the browser or in a headless Node process, in process, over
+loopback only, opening no real socket and transmitting no real packet.
+
 ## A note on appearance
 
 There are forty color themes, twenty dark and twenty light. Here is a light one.

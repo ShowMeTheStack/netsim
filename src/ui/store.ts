@@ -3,6 +3,7 @@ import type { Cmd, Msg, UiState } from '@/shared/protocol';
 import type { CapturedFrame, NodeId, LinkId, SnifferId, HostKind } from '@/engine/types';
 import type { CDiagnostic } from '@/shared/cprograms';
 import { THEMES, applyTheme } from './themes';
+import { trace } from './trace';
 
 export interface CompileResult { ok: boolean; diagnostics: CDiagnostic[]; pid?: number; at: number }
 
@@ -22,6 +23,8 @@ interface Store {
   setActiveSniffer: (id: SnifferId | null) => void; selectFrame: (f: { sid: SnifferId; n: number } | null) => void; setDisplayFilter: (sid: SnifferId, expr: string) => void;
   setHoverRange: (r: { start: number; end: number } | null) => void; setTheme: (id: string) => void; setBottomTab: (t: 'log' | 'breakpoints') => void;
   exportSession: () => void; importSession: (json: string) => void; loadScenario: (json: string) => void; showToast: (t: string | null) => void; dismissError: () => void;
+  exportCapsule: () => void; exportPcap: (sid: SnifferId, withLabels?: boolean) => void;
+  tracing: boolean; setTracing: (on: boolean) => void; exportTrace: () => void;
 }
 
 let worker: Worker | null = null;
@@ -51,7 +54,7 @@ export const useSim = create<Store>((set, get) => ({
       .then(() => set({ clangStatus: 'ready' }))
       .catch(() => set({ clangStatus: 'error' }));
   },
-  send: (c) => getWorker().postMessage(c),
+  send: (c) => { trace.cmd(c); getWorker().postMessage(c); },
   setTool: (tool) => set({ tool, connectFrom: null }),
   select: (n, l = null) => set({ selectedNode: n, selectedLink: l }),
   openNode: (id, tab) => set({ popupNode: id, popupLink: null, popupTab: tab ?? (id === get().popupNode ? get().popupTab : 'config') }),
@@ -69,6 +72,11 @@ export const useSim = create<Store>((set, get) => ({
   exportSession: () => get().send({ type: 'exportSession', theme: get().theme }),
   loadScenario: (json: string) => get().send({ type: 'loadScenario', json }),
   importSession: (json) => get().send({ type: 'importSession', json }),
+  exportCapsule: () => get().send({ type: 'exportCapsule' }),
+  exportPcap: (sid, withLabels = false) => get().send({ type: 'exportPcap', snifferId: sid, withLabels }),
+  tracing: false,
+  setTracing: (on) => { if (on) trace.enable(); else trace.disable(); set({ tracing: on }); },
+  exportTrace: () => { downloadText(`netsim-trace-${new Date().toISOString().replace(/[:.]/g, '-')}.json`, trace.export()); get().showToast(`Trace exported (${trace.count()} events)`); },
   showToast: (toast) => set({ toast }),
   dismissError: () => set({ error: null }),
 }));
@@ -98,7 +106,8 @@ export function initWorker() {
         const sids = Object.keys(m.st.sniffers).map(Number);
         if (s.activeSniffer === null && sids.length) patch.activeSniffer = sids[0]!;
         if (s.activeSniffer !== null && !m.st.sniffers[s.activeSniffer]) patch.activeSniffer = sids[0] ?? null;
-        if (m.st.lastHit && (!s.st?.lastHit || s.st.lastHit.t !== m.st.lastHit.t || s.st.lastHit.frameId !== m.st.lastHit.frameId)) patch.bottomTab = 'breakpoints';
+        if (m.st.lastHit && (!s.st?.lastHit || s.st.lastHit.t !== m.st.lastHit.t || s.st.lastHit.frameId !== m.st.lastHit.frameId)) { patch.bottomTab = 'breakpoints'; trace.record('breakpoint.hit', { milestone: m.st.lastHit.milestone, frameId: m.st.lastHit.frameId, t: m.st.lastHit.t }); }
+        if (trace.enabled() && m.st.scenario && s.st?.scenario) { const prev = new Map(s.st.scenario.results.map(r => [r.id, r.pass])); for (const r of m.st.scenario.results) if (prev.get(r.id) !== r.pass) trace.record('lab.check', { id: r.id, pass: r.pass }); }
         useSim.setState(patch); break;
       }
       case 'capture': {
@@ -108,6 +117,9 @@ export function initWorker() {
         useSim.setState({ captures: { ...s.captures, [m.snifferId]: capped } }); break;
       }
       case 'session': downloadText(`netsim-session-${new Date().toISOString().replace(/[:.]/g, '-')}.json`, m.json); useSim.getState().showToast('Session saved'); break;
+      case 'capsule': downloadText(`netsim-capsule-${new Date().toISOString().replace(/[:.]/g, '-')}.json`, m.json); useSim.getState().showToast('Reproducibility capsule saved'); break;
+      case 'capsuleResult': useSim.getState().showToast(m.ok ? 'Capsule verified: byte-identical replay' : `Capsule replay MISMATCH (${m.gotHash.slice(0, 8)} != ${m.wantHash.slice(0, 8)})`); break;
+      case 'pcap': { const ts = new Date().toISOString().replace(/[:.]/g, '-'); downloadBytes(`netsim-capture-${ts}.pcap`, m.pcap); if (m.labels) downloadText(`netsim-labels-${ts}.csv`, m.labels); useSim.getState().showToast('PCAP exported'); break; }
       case 'imported': useSim.setState({ captures: {}, selectedFrame: null, selectedNode: null, selectedLink: null, popupNode: null, popupLink: null, labOpen: true }); if (m.theme) useSim.getState().setTheme(m.theme); useSim.getState().showToast('Session loaded'); break;
       case 'error': useSim.setState({ error: m.message }); break;
       case 'compile': useSim.setState({ compileResults: { ...s.compileResults, [m.node]: { ok: m.ok, diagnostics: m.diagnostics, pid: m.pid, at: Date.now() } } }); break;
@@ -119,6 +131,11 @@ export function initWorker() {
 
 export function downloadText(name: string, text: string) {
   const blob = new Blob([text], { type: 'application/json' }); const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; a.setAttribute('data-testid', 'download-link'); document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+export function downloadBytes(name: string, bytes: Uint8Array, mime = 'application/vnd.tcpdump.pcap') {
+  const blob = new Blob([bytes as BlobPart], { type: mime }); const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = name; a.setAttribute('data-testid', 'download-link'); document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
 }

@@ -18,7 +18,7 @@ import { compileFilter as compileFilterFn, evalFilter as evalFilterFn } from '@/
 import { isHost, isAp, type EngineState, type HostState, type SwitchState, type NodeState, type NodeId, type LinkId, type HostKind, type Iface, type BreakpointHit, type Flight, type Milestone, type SnifferId, type LinkState } from './types';
 
 export function createState(seed = 1): EngineState {
-  return { version: 1, time: 0, seq: 0, rng: seedRng(seed), seed, events: [], nodes: {}, links: {}, sniffers: {}, breakpoints: [], nextBreakpointId: 1, nextNodeId: 1, nextLinkId: 1, nextSnifferId: 1, nextFrameId: 1, lastHit: null, log: [], recentMilestones: [], rf: { transmissions: [], nextTxId: 1, nextRfSeq: 1, monitors: {}, nextMonitorId: 1 }, scenario: null, lastActivityT: 0 };
+  return { version: 1, time: 0, seq: 0, rng: seedRng(seed), seed, events: [], nodes: {}, links: {}, sniffers: {}, breakpoints: [], nextBreakpointId: 1, nextNodeId: 1, nextLinkId: 1, nextSnifferId: 1, nextFrameId: 1, lastHit: null, log: [], recentMilestones: [], rf: { transmissions: [], nextTxId: 1, nextRfSeq: 1, monitors: {}, nextMonitorId: 1 }, scenario: null, lastActivityT: 0, txTag: null, frameOrigins: {} };
 }
 export function makeMac(nodeId: number, idx: number) { return `02:00:${((nodeId >> 8) & 255).toString(16).padStart(2, '0')}:${(nodeId & 255).toString(16).padStart(2, '0')}:00:${(idx & 255).toString(16).padStart(2, '0')}`; }
 function makeIface(nodeId: number, idx: number, name: string): Iface { return { name, mac: makeMac(nodeId, idx), ip: null, mask: prefixToMask(24), up: true, mtu: 1500, linkId: null, promisc: false, rxPackets: 0, txPackets: 0, rxBytes: 0, txBytes: 0, rxDrops: 0, txDrops: 0 }; }
@@ -208,7 +208,7 @@ export function ensureServices(st: EngineState) {
 
 /** Cold boot: keep topology and config, clear all dynamic state and return to t=0. */
 export function coldRestart(st: EngineState) {
-  st.time = 0; st.seq = 0; st.rng = seedRng(st.seed); st.events = []; st.lastHit = null; st.log = []; st.recentMilestones = []; st.nextFrameId = 1; st.lastActivityT = 0;
+  st.time = 0; st.seq = 0; st.rng = seedRng(st.seed); st.events = []; st.lastHit = null; st.log = []; st.recentMilestones = []; st.nextFrameId = 1; st.lastActivityT = 0; st.txTag = null; st.frameOrigins = {};
   for (const n of Object.values(st.nodes)) {
     if (isHost(n)) { n.arp = Object.fromEntries(Object.entries(n.arp).filter(([, e]) => e.static)); n.arpPending = {}; n.procs = {}; n.sockets = {}; n.tcpHistory = []; n.reasm = {}; n.dnsSock = null; n.dhcpServerSock = null; n.dhcpClient = null; n.dnsCache = {}; n.resolutions = {}; n.dnsWaiters = {}; resetRoutingDynamic(n); n.dhcpServer = { ...n.dhcpServer, leases: {} }; n.pmtu = {}; n.terminal = [`NetSim virtual OS — ${n.name}`, `Type 'help' for commands.`]; for (const i of n.ifaces) { i.rxPackets = i.txPackets = i.rxBytes = i.txBytes = i.rxDrops = i.txDrops = 0; } n.counters = zeroCounters(); }
     else if (n.type === 'switch') { n.macTable = {}; n.counters = { learned: 0, flooded: 0, forwarded: 0, filtered: 0 }; for (const p of n.ports) { p.rxPackets = p.txPackets = p.rxDrops = 0; } }

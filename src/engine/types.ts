@@ -143,6 +143,10 @@ export type LinkDirName = 'ab' | 'ba';
 
 export type Milestone = 'tx' | 'rx' | 'drop';
 export interface CapturedFrame { n: number; t: number; dir: LinkDirName; bytes: Uint8Array; from: NodeId; to: NodeId; frameId: number; drop?: string }
+/** Ground-truth provenance of a transmitted frame (E2): who put it on the wire and under what label.
+ *  Recorded only while a tx tag is active (adversary agents set one), so normal traffic stays unlabeled
+ *  and defaults to "benign" in the label sidecar. Keyed by frameId. */
+export interface FrameOrigin { tag: string; node: NodeId; pid?: number }
 export interface SnifferState { id: SnifferId; linkId: LinkId; frames: CapturedFrame[]; nextN: number; captureFilter: string; maxFrames: number; total: number }
 
 export interface Breakpoint { id: number; enabled: boolean; expr: string; milestones: Milestone[]; label?: string }
@@ -193,4 +197,8 @@ export interface EngineState {
   rf: { transmissions: RfTransmission[]; nextTxId: number; nextRfSeq: number; monitors: Record<number, AirMonitor>; nextMonitorId: number };
   scenario: Scenario | null;
   lastActivityT: number;
+  /** E2 provenance: the active transmission label (adversary agents set/clear it), and the per-frame
+   *  ground-truth origin keyed by frameId. Both optional so old sessions still load. */
+  txTag?: string | null;
+  frameOrigins?: Record<number, FrameOrigin>;
 }
