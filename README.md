@@ -29,6 +29,11 @@ Because the simulation is paused by default, a command like `ping` schedules its
 and then waits for you to advance time. The top bar and the terminal both tell you when
 that is the case, so nothing looks stuck.
 
+On any host you can also open a Code tab and write real C socket programs that compile in
+the browser and run on the simulated network, with everything from `socket` and `connect`
+up through processes, threads, and `select`, `poll`, and `epoll`. It is a feature in its
+own right, with its own section further down.
+
 ## A short tour
 
 Every host has a small virtual operating system with a terminal. Here a laptop pings
@@ -137,9 +142,47 @@ rather than described.
 
 ![TCP congestion window and sequence charts for a connection](docs/images/tcp-charts.png)
 
+## Writing C socket programs
+
+NetSim has a C workspace. Open the Code tab on any host and you can write a real C program
+against the Berkeley sockets API, compile it in the browser, and run it on the simulated
+network. There is no server and nothing to install: the compiler runs in the same worker as
+the simulation, and the program's sockets are wired to the simulated TCP and UDP stacks, so
+the bytes it sends appear in the sniffer like any other traffic. Every run is sandboxed. The
+program cannot touch a real socket, a real port, the page, or the file system; a system call
+only moves data inside the simulation.
+
+Two compilers sit behind the same Compile and Run button. The default is a real build of
+clang with a C standard library, so you get the whole language: structs, pointers, `malloc`,
+`printf`, `string.h`, and the system calls that matter for networking. That includes `fork`
+and `exec` for multi process servers, `signal`, `alarm`, and `kill` with real handlers and
+`EINTR` on an interrupted call, POSIX threads through `#include <pthread.h>` for a thread per
+connection, and `select`, `poll`, and `epoll` for one thread that serves many clients at
+once. The clang toolchain is about sixty megabytes and is fetched once, behind an explicit
+button, then cached; it is the only part of NetSim that is not already on the page. For quick
+experiments there is also a small C subset that compiles instantly with no download.
+
+![Writing a concurrent, thread per connection server in the Code tab, with the sockets API reference beside the editor](docs/images/code-editor.png)
+
+A program is a process on the host, driven by the same clock as everything else, and
+blocking calls really block. A `connect` waits for the handshake, an `accept` waits for a
+client, a `recv` waits for data: the program suspends until the simulated network makes
+progress and then resumes exactly where it left off, so you can step one system call at a
+time and watch it happen. The inspector shows the program's open file descriptors mapped to
+live socket state and what it is currently blocked on, so a server sitting in `select` with a
+listening socket looks like what it is.
+
+![A real select() server compiled in the browser, running on the simulated network and serving a client, with its listening socket and blocked state shown in the inspector](docs/images/code-server.png)
+
+There is a module of guided labs for all of this, from a first UDP datagram and the TCP
+handshake up to a thread per connection server, the same server written three ways with
+select, poll, and epoll, and a lab on signals and `EINTR`. The feature is introduced in the
+welcome tour, and the editor keeps the full API reference beside it so you are not writing
+from memory.
+
 ## The guided labs
 
-There are seventy guided labs across eighteen modules, from a first ping up to full
+There are eighty-one guided labs across nineteen modules, from a first ping up to full
 troubleshooting and enterprise capstones. Each lab gives you the background, then a set
 of numbered steps with the exact values to enter, things to observe, prompts to write
 your own notes, checks that tick off automatically as you get them right, and a few
@@ -155,7 +198,8 @@ You can move it, resize it, or fold it away.
 
 The modules are: getting started, physical and data link, switching, ARP, VLANs, IPv4
 and subnetting, fragmentation and ICMP, static routing, RIP, OSPF, BGP, NAT, transport
-with UDP and TCP, DHCP and DNS, HTTP, wireless, security, and capstones.
+with UDP and TCP, DHCP and DNS, HTTP, wireless, security, capstones, and socket
+programming in C.
 
 ## A note on appearance
 
@@ -202,8 +246,8 @@ command messages to the worker and renders the state snapshots the worker posts 
 ## Testing
 
 The project is tested without any manual clicking. Unit tests under `tests/unit` cover
-the codecs, the engine, each protocol, and a check that every one of the seventy labs is
-actually completable. End to end tests under `tests/e2e` drive the real interface in a
+the codecs, the engine, each protocol, the in-browser C compiler and its socket runtime,
+and a check that every one of the eighty-one labs is actually completable. End to end tests under `tests/e2e` drive the real interface in a
 headless browser. The full gate is:
 
 ```
