@@ -34,6 +34,23 @@ test('the launcher lists all 81 labs and loading one shows the guided drawer', a
   await expect(page.getByTestId('lab-steps')).toBeVisible();
 });
 
+test('Backspace while editing the lab notes edits the text, it does not delete the selected node', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('labs').click();
+  await page.getByTestId('launch-tcp-handshake').click();
+  await expect(page.getByTestId('lab-steps')).toBeVisible();
+  const nodesBefore = await page.evaluate(() => Object.keys((window as any).__netsim.get().st.nodes).length);
+  // select a node so the canvas delete shortcut would have something to remove
+  await page.getByTestId('canvas').click({ position: { x: 160, y: 300 } });
+  const notes = page.getByTestId('lab-notes');
+  await notes.click();
+  await notes.fill('hello');
+  for (let i = 0; i < 8; i++) await page.keyboard.press('Backspace');
+  await expect(notes).toHaveValue('');
+  const nodesAfter = await page.evaluate(() => Object.keys((window as any).__netsim.get().st.nodes).length);
+  expect(nodesAfter).toBe(nodesBefore);
+});
+
 test('a lab can be fully completed: OSPF adjacency turns every check green', async ({ page }) => {
   test.setTimeout(60000);
   await page.setViewportSize({ width: 1600, height: 900 });

@@ -154,3 +154,14 @@ describe('every lab is completable (all checks pass after the intended solution)
     });
   }
 });
+
+describe('lab topology placements', () => {
+  it('broadcast-domains sniffers are attached to PC-C and PC-D, as the steps describe', () => {
+    const { st } = mk('link-domains');
+    const nameOf = (id: number) => (st.nodes[id] as HostState)?.name;
+    const sniffedHosts = Object.values(st.sniffers)
+      .map(s => { const l = st.links[s.linkId]!; return [nameOf(l.a.node), nameOf(l.b.node)].filter(n => n !== 'Switch1'); })
+      .flat().sort();
+    expect(sniffedHosts).toEqual(['PC-C', 'PC-D']);
+  });
+});

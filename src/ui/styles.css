@@ -58,7 +58,7 @@ tr.proto-HTTP { background: var(--proto-http); } tr.proto-VLAN { background: var
 .modal-backdrop > .modal { pointer-events: auto; }
 /* Height adapts to the active tab's content (no dead space below short tabs); tall tabs - terminal,
    code - carry their own height and the modal grows to fit, up to the viewport cap. */
-.modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; width: 760px; max-width: 95vw; height: auto; max-height: 90vh; display: grid; grid-template-rows: auto auto 1fr; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+.modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; width: 760px; max-width: 95vw; height: auto; max-height: 90vh; display: grid; grid-template-rows: auto auto 1fr; box-shadow: 0 20px 60px rgba(0,0,0,.4); resize: both; overflow: hidden; min-width: 380px; min-height: 240px; }
 .modal .head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: move; user-select: none; }
 .modal .head input { cursor: text; }
 .drag-grip { color: var(--fg2); font-size: 12px; letter-spacing: -3px; }

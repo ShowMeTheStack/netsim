@@ -63,8 +63,9 @@ export const LINK_LAYER: Lab[] = [
     build: () => scene('link-domains', 'Broadcast domains', 'Watch an ARP broadcast reach every host on the switch.', [{ id: 'learn', label: 'The switch learned multiple MAC addresses', kind: 'macLearned', node: 'Switch1', count: 3 }], (st) => {
       const sw = E.addSwitch(st, 360, 120, 8, 'Switch1');
       const names = ['PC-A', 'PC-B', 'PC-C', 'PC-D'];
-      names.forEach((nm, i) => { const h = E.addHost(st, i === 0 ? 'laptop' : 'desktop', 120 + i * 150, 320, nm); E.connect(st, h.id, 0, sw.id, i); E.setIfaceIp(st, h, 'eth0', ip(`10.0.0.${i + 1}`), m(24)); });
-      E.addSniffer(st, 2); E.addSniffer(st, 3);
+      const links: number[] = [];
+      names.forEach((nm, i) => { const h = E.addHost(st, i === 0 ? 'laptop' : 'desktop', 120 + i * 150, 320, nm); links[i] = E.connect(st, h.id, 0, sw.id, i)!; E.setIfaceIp(st, h, 'eth0', ip(`10.0.0.${i + 1}`), m(24)); });
+      E.addSniffer(st, links[2]!); E.addSniffer(st, links[3]!); // PC-C's and PC-D's links, as the steps describe
     }),
     checks: [{ id: 'learn', label: 'The switch learned multiple MAC addresses', kind: 'macLearned', node: 'Switch1', count: 3 }],
     steps: [

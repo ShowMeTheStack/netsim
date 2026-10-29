@@ -84,7 +84,12 @@ export function CanvasView() {
   const onMove = (e: React.MouseEvent) => { const d = drag.current; if (!d) return; const { x, y } = pos(e); const s = useSim.getState(); const n = s.st?.nodes[d.id]; if (!n) return; d.moved = true; n.x = x + d.dx; n.y = y + d.dy; };
   const onUp = () => { const d = drag.current; drag.current = null; if (!d || !d.moved) return; const s = useSim.getState(); const n = s.st?.nodes[d.id]; if (n) s.send({ type: 'moveNode', id: d.id, x: Math.round(n.x), y: Math.round(n.y) }); };
   const onDbl = (e: React.MouseEvent) => { const s = useSim.getState(); const st = s.st; if (!st) return; const { x, y } = pos(e); const n = hitNode(st, x, y); if (n) { s.openNode(n.id); return; } const l = hitLink(st, x, y); if (l) s.openLink(l.id); };
-  const onKey = (e: React.KeyboardEvent) => { const s = useSim.getState(); if (e.key === 'Delete' || e.key === 'Backspace') { if (s.selectedNode !== null) s.send({ type: 'removeNode', id: s.selectedNode }); else if (s.selectedLink !== null) s.send({ type: 'removeLink', id: s.selectedLink }); } if (e.key === 'Escape') s.setTool({ kind: 'select' }); };
+  const onKey = (e: React.KeyboardEvent) => {
+    // Never treat a keystroke as a canvas shortcut while the user is typing in a field (e.g.
+    // Backspace in the lab notes, which bubbles up here because the drawer floats over the canvas).
+    const t = e.target as HTMLElement;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    const s = useSim.getState(); if (e.key === 'Delete' || e.key === 'Backspace') { if (s.selectedNode !== null) s.send({ type: 'removeNode', id: s.selectedNode }); else if (s.selectedLink !== null) s.send({ type: 'removeLink', id: s.selectedLink }); } if (e.key === 'Escape') s.setTool({ kind: 'select' }); };
   const cursor = tool.kind === 'place' ? 'copy' : tool.kind === 'connect' || tool.kind === 'sniff' ? 'crosshair' : 'default';
   const hint = tool.kind === 'place' ? 'Click on the canvas to place the device' : tool.kind === 'connect' ? 'Click the first node, then the second node' : tool.kind === 'sniff' ? 'Click a link to attach a sniffer' : '';
   return (
