@@ -6,6 +6,8 @@ import { decodeFrame, fieldValue } from '@/engine/codecs/decode';
 import { encodeUdp, decodeUdp } from '@/engine/codecs/udp';
 import { encodeTcp, decodeTcp, TCP_SYN, TCP_ACK } from '@/engine/codecs/tcp';
 import { SEC } from '@/engine/core';
+import { ALL_LABS } from '@/ui/labs';
+import { parseSession } from '@/session/session';
 import type { EngineState, HostState, TcpSocket } from '@/engine/types';
 
 const ip = ipToU32; const m24 = prefixToMask(24);
@@ -101,6 +103,36 @@ describe('TCP', () => {
     const { st, a, b, l2 } = routed(5, { delay: 10_000, bw: 20e6, queue: 12 }); runCommand(st, a, `sysctl net.ipv4.tcp_congestion_control=${cc}`); runCommand(st, b, 'iperf -s'); runCommand(st, a, 'iperf -c 10.0.2.10 -n 3000000'); void l2;
     run(st, 60); const o = out(a); expect(o).toMatch(/0\.0-\s*[\d.]+ sec\s+[\d.]+ MBytes/);
     const s = (a as HostState); const logs = JSON.stringify(s.terminal); void logs;
+  });
+  it('clean path: cwnd is window-validated and does not run away past the receive window (RFC 5681 §3.1)', () => {
+    // A uniform, lossless path: nothing is ever dropped, so slow start never ends and ssthresh
+    // stays infinite — that part is correct TCP. The defect this guards against is cwnd inflating
+    // without bound while the receive window caps what is actually in flight.
+    const { st, a, b } = routed(5, { delay: 10_000, bw: 20e6, queue: 12 });
+    runCommand(st, b, 'iperf -s'); runCommand(st, a, 'iperf -c 10.0.2.10 -n 3000000'); run(st, 5);
+    expect(out(a)).toMatch(/0\.0-\s*[\d.]+ sec\s+[\d.]+ MBytes/); // transfer completed
+    const s = tcpSock(a)!; const maxCwnd = Math.max(...s.trace.map(t => t.cwnd)); const maxInflight = Math.max(...s.trace.map(t => t.inflight));
+    expect(s.trace.every(t => t.ssthresh > (1 << 29))).toBe(true); // lossless: ssthresh never lowered
+    // cwnd tracks usable flight, not a runaway value: it stays within a segment-few of what the
+    // receive window ever allowed in flight (pre-fix this reached ~1.5 MB on a 256 KB window).
+    expect(maxCwnd).toBeLessThanOrEqual(maxInflight + 8 * 1460);
+  });
+  it.each(['tahoe', 'reno'] as const)('the congestion-control lab shows every phase for %s (slow start → loss → congestion avoidance)', (cc) => {
+    // Build the real lab topology, not a hand-rolled one: this guards the lab itself. The middle
+    // link must be a true bottleneck (fast edges) so a lossless transfer actually experiences loss,
+    // lowers ssthresh, and crosses into congestion avoidance — otherwise the lab can never show it.
+    const st = parseSession(ALL_LABS.find(l => l.id === 'tcp-congestion')!.build()).state;
+    const host = (n: string) => Object.values(st.nodes).find(x => x.name === n) as HostState;
+    const client = host('Client');
+    runCommand(st, client, `sysctl net.ipv4.tcp_congestion_control=${cc}`);
+    runCommand(st, host('Server'), 'iperf -s'); runCommand(st, client, 'iperf -c 10.0.2.10 -n 3000000');
+    advance(st, 60 * SEC, 5e6);
+    const s = Object.values(client.sockets).find(x => x.proto === 'tcp') as TcpSocket;
+    const INF = 1 << 29;
+    expect(s.trace.some(p => p.ssthresh >= INF && p.cwnd < p.ssthresh)).toBe(true);     // slow start
+    expect(s.trace.some(p => p.ssthresh < INF)).toBe(true);                             // loss lowered ssthresh
+    expect(s.trace.some(p => p.ssthresh < INF && p.cwnd >= p.ssthresh)).toBe(true);     // congestion avoidance
+    expect(s.trace.filter(p => p.ev === 'FRX' || p.ev === 'RTO').length).toBeGreaterThan(0);
   });
   it('congestion controllers diverge as expected under forced triple-dup-ACK loss', () => {
     const results: Record<string, { fastRetx: number; rto: number; cwndAfter: number; ssthresh: number }> = {};

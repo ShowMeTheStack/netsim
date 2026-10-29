@@ -2,12 +2,16 @@ import { E, ip, m, scene, type Lab } from './helpers';
 import type { EngineState, ScenarioCheck } from '@/engine/types';
 const MOD = 'Transport (UDP/TCP)';
 // A(10.0.1.10) - R1 - R2 - B(10.0.2.10). Middle link is the bottleneck/impairment point (sniffed).
-function wan(opts: { bw?: number; delay?: number; loss?: number; queue?: number; slowReader?: boolean } = {}) {
+function wan(opts: { bw?: number; edgeBw?: number; delay?: number; loss?: number; queue?: number; slowReader?: boolean } = {}) {
   return (st: EngineState) => {
+    // The two edge links are fast; the middle link (bw) is the bottleneck, so its drop-tail queue
+    // is the only place congestion builds. Edges must stay faster than bw or there is no bottleneck
+    // and a lossless transfer never leaves slow start (cwnd would never meet a lowered ssthresh).
+    const edgeBw = opts.edgeBw ?? 1e9;
     const a = E.addHost(st, 'laptop', 120, 320, 'Client'); const r1 = E.addHost(st, 'router', 320, 220, 'R1'); const r2 = E.addHost(st, 'router', 540, 220, 'R2'); const b = E.addHost(st, 'server', 740, 320, 'Server');
-    const l1 = E.connect(st, a.id, 0, r1.id, 0, { delayUs: (opts.delay ?? 10000), bandwidthBps: opts.bw ?? 100e6 })!;
+    const l1 = E.connect(st, a.id, 0, r1.id, 0, { delayUs: (opts.delay ?? 10000), bandwidthBps: edgeBw })!;
     const l2 = E.connect(st, r1.id, 1, r2.id, 0, { delayUs: (opts.delay ?? 10000), bandwidthBps: opts.bw ?? 20e6, lossPct: opts.loss ?? 0, queueDepth: opts.queue ?? 200 })!;
-    E.connect(st, r2.id, 1, b.id, 0, { delayUs: (opts.delay ?? 10000), bandwidthBps: opts.bw ?? 100e6 });
+    E.connect(st, r2.id, 1, b.id, 0, { delayUs: (opts.delay ?? 10000), bandwidthBps: edgeBw });
     E.setIfaceIp(st, a, 'eth0', ip('10.0.1.10'), m(24)); E.setDefaultGateway(a, ip('10.0.1.1'));
     E.setIfaceIp(st, r1, 'eth0', ip('10.0.1.1'), m(24)); E.setIfaceIp(st, r1, 'eth1', ip('10.0.12.1'), m(24)); E.addStaticRoute(r1, ip('10.0.2.0'), m(24), ip('10.0.12.2'));
     E.setIfaceIp(st, r2, 'eth0', ip('10.0.12.2'), m(24)); E.setIfaceIp(st, r2, 'eth1', ip('10.0.2.1'), m(24)); E.addStaticRoute(r2, ip('10.0.1.0'), m(24), ip('10.0.12.1'));

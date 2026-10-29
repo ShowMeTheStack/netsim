@@ -277,7 +277,7 @@ function onAck(st: EngineState, h: HostState, s: TcpSocket, seg: TcpSegment) {
   if (s.inRecovery) {
     if (seqLt(ack, s.recover)) { const cont = cc.ccOnPartialAck(s, acked); slog(st, s, `partial ACK ${ack} < recover ${s.recover}${cont ? ' → retransmit next' : ''}`); trace(st, s, 'PACK'); if (cont) { retransmit(st, h, s, s.sndUna); s.highRxt = s.sndUna + effMss(h, s); armRto(st, h, s); } else { s.dupAcks = 0; } }
     else { cc.ccOnFullAck(s); slog(st, s, `recovery complete, cwnd=${s.cwnd}`); trace(st, s, 'REC'); }
-  } else { s.dupAcks = 0; cc.ccOnNewAck(s, acked, st.time); trace(st, s); }
+  } else { s.dupAcks = 0; cc.ccOnNewAck(s, acked, st.time, (s.sndNxt - s.sndUna) + acked); trace(st, s); }
   // state transitions driven by our FIN being acked
   if (s.finAcked) {
     if (s.state === 'FIN_WAIT_1') { s.state = 'FIN_WAIT_2'; slog(st, s, 'FIN acked → FIN_WAIT_2'); procNotify(st, h, s.owner, { type: 'tcpFinAcked', sock: s.id }); }

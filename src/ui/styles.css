@@ -8,8 +8,8 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
 button.active { outline: 2px solid var(--accent); }
 button.danger { color: var(--danger); }
 button:disabled { opacity: .5; cursor: default; }
-input, select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
-input:focus, select:focus { outline: none; border-color: var(--accent); }
+input, select, textarea { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 input.invalid { border-color: var(--danger); }
 .app { display: grid; grid-template-rows: 44px 1fr var(--row-bottom, 200px); grid-template-columns: var(--col-left, 170px) 1fr var(--col-right, 520px); height: 100%; }
 .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--bg2); border-bottom: 1px solid var(--border); }

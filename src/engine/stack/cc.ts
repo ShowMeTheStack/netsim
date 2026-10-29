@@ -8,8 +8,13 @@ export function ccInit(s: TcpSocket, initSegs: number) {
   s.cwnd = initSegs * s.mss; s.ssthresh = 0x7fffffff; s.dupAcks = 0; s.inRecovery = false; s.recover = s.iss;
   s.cubic = { wMax: 0, k: 0, epochStart: 0, originPoint: 0, tcpCwnd: 0, ackCnt: 0, minRtt: 0 };
 }
-/** ACK advanced snd_una while not in loss recovery. */
-export function ccOnNewAck(s: TcpSocket, acked: number, now: number) {
+/** ACK advanced snd_una while not in loss recovery. `prevFlight` is the bytes outstanding
+ *  just before this ACK (sndNxt - oldSndUna), used for congestion-window validation. */
+export function ccOnNewAck(s: TcpSocket, acked: number, now: number, prevFlight: number) {
+  // RFC 5681 §3.1 / RFC 7661: do not grow cwnd when the flow is not cwnd-limited (it is
+  // application- or receive-window-limited). Without this, cwnd runs away on a clean or
+  // receive-window-bounded path while nothing is ever in flight to justify it.
+  if (prevFlight + s.mss <= s.cwnd) return;
   if (s.cwnd < s.ssthresh) { s.cwnd += Math.min(acked, s.mss); return; } // slow start (RFC 5681: at most SMSS per ACK)
   if (s.cc === 'cubic') { cubicUpdate(s, now); return; }
   // congestion avoidance: +MSS per RTT (byte-counting approximation)
